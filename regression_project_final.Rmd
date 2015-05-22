@@ -1,0 +1,197 @@
+---
+title: "Motor Trend - Transmission type does not affect MPG"
+author: "Icaro C. Bombonato - May 2015"
+geometry: margin=2cm
+output:
+  pdf_document:
+    fig_caption: yes
+    fig_height: 6
+    fig_width: 7
+  html_document: default
+fontsize: 10pt
+---
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.path='Figs/',
+                      warning=FALSE, message=FALSE)
+```
+```{r functions, include=FALSE, echo=FALSE}
+incCount <- function(inObj, useName) {
+    nObj <- length(inObj)
+    useNum <- max(inObj) + 1
+    inObj <- c(inObj, useNum)
+    names(inObj)[nObj + 1] <- useName
+    inObj
+}
+figCount <- c(`_` = 0)
+```
+```{r, results='hide', echo=FALSE}
+# Loading required libraries
+library(datasets)
+library(ggplot2)
+library(car)
+library(MASS)
+require(gclus)
+
+# Loading the data
+data(mtcars)
+
+# Exploring the data and their relationships
+# cars.cor <- cor(mtcars)
+# cars.color <- dmat.color(cars.cor)
+# cpairs(mtcars,panel.colors=cars.color,pch=".",gap=.5, 
+#        upper.panel=panel.smooth)
+
+# Transforming the data
+mtcars$am <- factor(mtcars$am, levels = c(0,1), labels = c("automatic", "manual"))
+mtcars$cyl <- factor(mtcars$cyl, levels = c(4,6,8))
+mtcars$vs <- factor(mtcars$vs, levels = c(0,1))
+
+# Fit linear model of mpg ~ am
+fit_am <- lm(mpg ~ am, data = mtcars)
+summary(fit_am)
+
+# Fit linear model of mpg ~ . (All variables in the dataset)
+fit01 <- lm(mpg ~ ., data = mtcars)
+# Looking the summary to get the significant variables
+summary(fit01)
+
+# After looking the summary, there was no significant variable, p < 0.05, so I did an outlierTest in the data
+outlierTest(fit01)
+# Found "Chrysler Imperial" as an outlier based on the Bonferonni outlier test
+# Dropping the outlier
+rowsToDrop <- c("Chrysler Imperial")
+mtcarsNew <- mtcars[ !(rownames(mtcars) %in% rowsToDrop), ]
+# Re-fit the model and found another outlier, this time it was "Fiat 128"
+fit01 <- lm(mpg ~ ., data = mtcarsNew)
+outlierTest(fit01)
+# Dropping the outlier
+rowsToDrop <- c("Fiat 128")
+mtcarsNew <- mtcarsNew[ !(rownames(mtcarsNew) %in% rowsToDrop), ]
+
+# Re-fit the model and test for outliers. No significant outlier found this time. (Bonferonni p > 0.05)
+fit01 <- lm(mpg ~ ., data = mtcarsNew)
+outlierTest(fit01)
+
+# Looking the summary to get the significant variables
+summary(fit01)
+# wt and hp are significant, with p-values < 0.05
+
+# Fitting a model with wt + hp + am, even after the summary of fit02 show that it was not.
+# But we want to prove it.
+fit02 <- lm(mpg ~ wt + hp + am, data = mtcarsNew)
+# Lookin the summary and prove that am is not significant to the model, with p-value > 0.05
+summary(fit02)
+
+# Doing a backward stepAIC to get the best model, based on the Akaike Information Criterion (AIC) value - lower is better
+stepAIC(fit02, direction="backward")
+
+#And it shows, based on the AIC score that the best model is the one bellow, whitout the am variable
+fitBest <- lm(mpg ~ wt + hp, mtcarsNew)
+
+#Plot the best model with residuals
+# crPlots(fitBest)
+
+# After that, I investigate why transmission type alone seens to influence the mpg, but with other variables it does not
+# And I found a Cofounder variable, Weight (wt). Automatic cars tends to have more weight, and weight causes variation in Miles per Galon
+g <- ggplot(data = mtcarsNew, aes(x = am, y = wt)) +
+    geom_boxplot() +
+    xlab("Transmission Type") +
+    ylab("Weight (lb/1000)")
+```
+# Summary
+
+In this analysis, I explored the relationship between a set of variables and miles per gallon (MPG) (outcome). My goal was to answer these two questions:
+
+- “Is an automatic or manual transmission better for MPG”
+- "Quantify the MPG difference between automatic and manual transmissions"
+
+The conclusion is that Transmission Type (am) does not influence Miles per Galon (mpg) at a significant level. 
+What I found, was a cofounder in Weigth, that if ignored, can lead to a miss interpretation that Transmission Type has significant influence on Miles per Galon.
+
+# Analysis
+
+First I make a scatterplotMatrix using the gclus package to look at the data, their correlations and their linear tendencies as **figure 1** shows.
+
+After that, I change some variables to factor, am, cyl and vs and than I made a linear model of Miles per Galon (mpg) ~ TransmissionType (am) and take a look at the coefficients
+```{r, results='markup'}
+coef(summary(lm(mpg ~ am, data = mtcars)))
+```
+Looking at the summary of that linear model, we can see that for automatic transmission, the coefficient is 17.147 mpg and that there is and estimated change of ~7.245 in mpg from Automatic to Manual transmission.  
+We also see that the diference is significant, since the p-value is very low: 0.000285.  
+So, looking ONLY for am and mpg, we can reject the null hipotesis that automatic and manual transmission has the same effect on mpg.
+
+Now, we will try to prove it, using other models and variables from the dataset.
+
+We will start with a model containing all variables, and then we will make it better.
+```{r, eval=FALSE}
+lm(mpg ~ ., data = mtcars)
+```
+Looking at the summary of this model, there are no one significant value, p-value < 0.05. Which suggest that we can have some problem at the data.
+After performing a Bonferonni outlier test with the function outlierTest() in the car package, I removed two significant outliers from the dataset, "Chrysler Imperial" and "Fiat 128", and then I fit the model again and take a look at the new summary:
+```{r, eval = FALSE}
+# All other variables are ommited because they are not significant
+Coefficients:
+            Estimate Std. Error t value Pr(>|t|)   
+(Intercept) 20.56031   13.49486   1.524  0.14499   
+hp          -0.05309    0.02257  -2.352  0.03026 * 
+wt          -5.78433    1.64919  -3.507  0.00252 **
+ammanual     1.08859    1.73087   0.629  0.53730   
+```
+Surprisily, we can see that only Weight (wt) and Horsepower (hp) are significant to the model.  
+So, lets build a new model excluding all variables that are not important. We will keep Transmition, since it was the main variable for this analysis. And take a look at the coefficients again:
+```{r}
+coef(summary(lm(mpg ~ wt + hp + am, data = mtcarsNew)))
+```
+Again, we see that Transmission is not significant for the model.
+Now, lets do a backward Akaike Information Criterion (AIC) to get the best model using our formula mpg ~ wt + hp + am.
+```{r, eval = FALSE}
+stepAIC(fit02, direction="backward")
+# Start:  AIC=50.07
+# mpg ~ wt + hp + am
+# Step:  AIC=48.6
+# mpg ~ wt + hp
+# Call:
+# lm(formula = mpg ~ wt + hp, data = mtcarsNew)
+```
+Based on AIC value (lower is better) the correct model to call is **mpg ~ wt + hp** without the am variable.
+
+After that, I investigate why transmission type alone seens to influence the mpg, but with other variables in the mix, it does not. And I found a cofounder variable, **Weight (wt)**. Automatic cars tends to have more weight, and weight causes variation in Miles per Galon. We show that in **figure 2**.
+
+So, what we can infer taking a look at the summary of our best model?
+```{r, eval = FALSE}
+Coefficients:
+             Estimate Std. Error t value Pr(>|t|)    
+(Intercept) 37.674426   1.443662  26.096  < 2e-16 ***
+wt          -4.305250   0.558198  -7.713  2.7e-08 ***
+hp          -0.028122   0.007531  -3.734  0.00089 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+Residual standard error: 2.144 on 27 degrees of freedom
+Multiple R-squared:  0.8685,	Adjusted R-squared:  0.8588 
+F-statistic: 89.17 on 2 and 27 DF,  p-value: 1.273e-12
+```
+# Conclusion
+- Combined with others variables present in a car, transmission by itself does not have a signifcant impact in Miles per Galon
+- For each unit increase in Weight (wt), we have a decrease of ~4.30 in Miles per Galon with 0.56 standard errors
+- For each unit increase in Horse Power (hp), we have a decrease of 0.03 in Miles per Galon with 0.008 standard errors
+- Our model cover ~86% of the variance explained in the data, has a significant p-value and also a significant F-statistic.
+
+You can see the residual plot of our best model at **figure 3**.
+
+```{r, echo=FALSE, tidy=FALSE}
+rm(mtcars)
+data(mtcars)
+cars.cor <- cor(mtcars)
+cars.color <- dmat.color(cars.cor)
+cpairs(mtcars,panel.colors=cars.color,pch=".",gap=.5, 
+       upper.panel=panel.smooth, main = "Figure 1: Enhanced scatterplot matrix of mtcars data")
+```
+```{r, echo = FALSE, tidy=FALSE}
+g + ggtitle("Figure 2: Transmission Type by Weight")
+```
+```{r, echo=FALSE, tidy=FALSE}
+crPlots(fitBest, main = "Figure 3: Component + Residuals of best model (mpg ~ wt + hp)")
+```
+
+
+
