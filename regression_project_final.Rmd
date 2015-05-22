@@ -14,17 +14,8 @@ fontsize: 10pt
 knitr::opts_chunk$set(fig.path='Figs/',
                       warning=FALSE, message=FALSE)
 ```
-```{r functions, include=FALSE, echo=FALSE}
-incCount <- function(inObj, useName) {
-    nObj <- length(inObj)
-    useNum <- max(inObj) + 1
-    inObj <- c(inObj, useNum)
-    names(inObj)[nObj + 1] <- useName
-    inObj
-}
-figCount <- c(`_` = 0)
-```
 ```{r, results='hide', echo=FALSE}
+# This code was omitted at the pdf file
 # Loading required libraries
 library(datasets)
 library(ggplot2)
